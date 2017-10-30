@@ -3,7 +3,7 @@ data
 #*.h5
 models
 *.swp
-*.p
+#*.p
 .idea/
 .DS_Store
 test_images_output
@@ -13,3 +13,4 @@ data
 tested_models
 good_models
 recording
+problem_images
