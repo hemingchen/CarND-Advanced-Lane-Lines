@@ -3,7 +3,7 @@ import matplotlib.image as mpimg
 from helper_funcs import *
 from param_defs import *
 
-# raw_img = mpimg.imread("test_images/project_video_41_42/7.jpg")
+# raw_img = mpimg.imread("test_images/project_video_41_42/11.jpg")
 # raw_img = mpimg.imread("test_images/challenge_video_0_1/2.jpg")
 raw_img = mpimg.imread("test_images/test1.jpg")
 
@@ -57,7 +57,34 @@ visualize_image_transformation(
     after_img=color_binary, after_img_title='S Channel Thresholding')
 
 ###############################################################################
-# 6) Test combination of all binary images
+# 6) Test color thresholding function
+###############################################################################
+select_yellow_binary = select_color_threshold(
+    img=undistorted_raw_img,
+    range=yellow_range,
+    color_conversion=cv2.COLOR_RGB2HSV)
+select_white_binary = select_color_threshold(
+    img=undistorted_raw_img,
+    range=white_range,
+    color_conversion=None)
+
+select_black_binary = select_color_threshold(
+    img=undistorted_raw_img,
+    range=black_range,
+    color_conversion=None)
+
+visualize_image_transformation(
+    before_img=undistorted_raw_img, before_img_title='Original Image',
+    after_img=select_yellow_binary, after_img_title='Select Yellow Color Thresholding')
+visualize_image_transformation(
+    before_img=undistorted_raw_img, before_img_title='Original Image',
+    after_img=select_white_binary, after_img_title='Select White Color Thresholding')
+visualize_image_transformation(
+    before_img=undistorted_raw_img, before_img_title='Original Image',
+    after_img=select_white_binary, after_img_title='Select Black Color Thresholding')
+
+###############################################################################
+# 7) Test combination of all binary images
 ###############################################################################
 combined_binary = np.zeros_like(dir_binary, dtype=np.uint8)
 combined_binary[((gradx == 1) & (grady == 1)) | ((mag_binary == 1) & (dir_binary == 1)) | color_binary == 1] = 1
@@ -67,7 +94,7 @@ visualize_image_transformation(
     after_img=combined_binary, after_img_title='Combination of Gradient, Mag, Dir Thresholding')
 
 ###############################################################################
-# 7) Test selected combination of thresholds
+# 8) Test selected combination of thresholds
 ###############################################################################
 combined_binary = apply_multiple_thresholds(
     img=undistorted_raw_img,
@@ -78,14 +105,17 @@ combined_binary = apply_multiple_thresholds(
     dir_thresh=(0, np.pi / 2),
     h_thresh=None,
     l_thresh=None,
-    s_thresh=(170, 255))
+    s_thresh=(170, 255),
+    yellow_range=yellow_range,
+    white_range=white_range,
+    black_range=black_range)
 
 visualize_image_transformation(
     before_img=undistorted_raw_img, before_img_title='Original Image',
     after_img=combined_binary, after_img_title='Combination of Selected Thresholds')
 
 ###############################################################################
-# 8) Test masking
+# 9) Test masking
 ###############################################################################
 masked_img = region_of_interest(combined_binary, vertices)
 
@@ -94,7 +124,7 @@ visualize_image_transformation(
     after_img=masked_img, after_img_title='After Applying Mask')
 
 ###############################################################################
-# 9) Test perspective transformation
+# 10) Test perspective transformation
 ###############################################################################
 warped_img = cv2.warpPerspective(masked_img, M, (img_shape[1], img_shape[0]), flags=cv2.INTER_LINEAR)
 
@@ -103,21 +133,24 @@ visualize_image_transformation(
     after_img=warped_img, after_img_title='After Perspective Transformation')
 
 ###############################################################################
-# 10) Test lane line dection with sliding windows
+# 11) Test lane line dection with sliding windows
 ###############################################################################
 prior_left_fit, prior_right_fit = None, None
+prior_left_fit_cr, prior_right_fit_cr = None, None
 
 # Get starting points on the bottom of the image
 leftx_base, rightx_base = get_starting_points_of_lane_lines(img=warped_img)
 
 # Get lane lines with sliding windows
-left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
+left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
     get_lane_lines_with_sliding_window(
         img=warped_img,
         leftx_base=leftx_base,
         rightx_base=rightx_base,
         prior_left_fit=prior_left_fit,
         prior_right_fit=prior_right_fit,
+        prior_left_fit_cr=prior_left_fit_cr,
+        prior_right_fit_cr=prior_right_fit_cr,
         xm_per_pix=xm_per_pix,
         ym_per_pix=ym_per_pix,
         nwindows=nwindows,
@@ -136,7 +169,7 @@ plt.title(title, fontsize=20)
 plt.savefig("./examples/" + title.replace(" ", "_") + ".jpg")
 
 ###############################################################################
-# 11) Test lane line detection using prior frame as reference
+# 12) Test lane line detection using prior frame as reference
 ###############################################################################
 # Prior frame (although here we are using the same image for both frames)
 # Get starting points on the bottom of the image
@@ -144,12 +177,14 @@ leftx_base, rightx_base = get_starting_points_of_lane_lines(
     img=warped_img)
 
 # Get lane lines with sliding winows
-prior_left_fit, prior_right_fit, _, _, _, _ = get_lane_lines_with_sliding_window(
+prior_left_fit, prior_right_fit, _, _, _, _, _, _ = get_lane_lines_with_sliding_window(
     img=warped_img,
     leftx_base=leftx_base,
     rightx_base=rightx_base,
     prior_left_fit=prior_left_fit,
     prior_right_fit=prior_right_fit,
+    prior_left_fit_cr=prior_left_fit_cr,
+    prior_right_fit_cr=prior_right_fit_cr,
     xm_per_pix=xm_per_pix,
     ym_per_pix=ym_per_pix,
     nwindows=nwindows,
@@ -162,10 +197,12 @@ prior_left_fit, prior_right_fit, _, _, _, _ = get_lane_lines_with_sliding_window
     lane_line_thickness=lane_thickness)
 
 # Get lane lines using prior window information
-left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = get_lane_lines_based_on_prior_frame_lines(
+left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = get_lane_lines_based_on_prior_frame_lines(
     img=warped_img,
     prior_left_fit=prior_left_fit,
     prior_right_fit=prior_right_fit,
+    prior_left_fit_cr=prior_left_fit_cr,
+    prior_right_fit_cr=prior_right_fit_cr,
     xm_per_pix=xm_per_pix,
     ym_per_pix=ym_per_pix,
     margin=margin,
@@ -187,7 +224,7 @@ print("right line curvature: {:.2f} m".format(right_curverad))
 print("vehicle is {:.2f} m {} of the center".format(veh_pos_wrt_ln_ctr, 'R' if veh_pos_wrt_ln_ctr < 0 else 'L'))
 
 ###############################################################################
-# 12) Draw lane lines
+# 13) Draw lane lines
 ###############################################################################
 blank_canvas = np.zeros_like(raw_img)
 
@@ -205,7 +242,7 @@ plt.imshow(lane_img)
 plt.title("Lane Lines from Top View", fontsize=20)
 
 ###############################################################################
-# 13) Highlight lane area
+# 14) Highlight lane area
 ###############################################################################
 hightlight_area_mask = highlight_lane_area(
     img=blank_canvas,
@@ -224,7 +261,7 @@ plt.title(title, fontsize=20)
 plt.savefig("./examples/" + title.replace(" ", "_") + ".jpg")
 
 ###############################################################################
-# 14) Highlight lane area changed back to driver perspective
+# 15) Highlight lane area changed back to driver perspective
 ###############################################################################
 lane_lines_driver_perspective = cv2.warpPerspective(
     highlighted_lane_img,
@@ -237,7 +274,7 @@ plt.imshow(lane_lines_driver_perspective)
 plt.title("Lane Lines from Driver Perspective", fontsize=20)
 
 ###############################################################################
-# 15) Highlight lane area on original (undistorted) image
+# 16) Highlight lane area on original (undistorted) image
 ###############################################################################
 undistorted_raw_img_with_lanes = cv2.add(lane_lines_driver_perspective, undistorted_raw_img)
 
@@ -248,7 +285,7 @@ plt.title(title, fontsize=20)
 plt.savefig("./examples/" + title.replace(" ", "_") + ".jpg")
 
 ###############################################################################
-# 15) Add lane information on image
+# 17) Add lane information on image
 ###############################################################################
 undistorted_raw_img_with_lanes_info = add_lane_info_to_image(
     img=undistorted_raw_img_with_lanes,
@@ -263,7 +300,7 @@ plt.title(title, fontsize=20)
 plt.savefig("./examples/" + title.replace(" ", "_") + ".jpg")
 
 ###############################################################################
-# 16) Test debug image output
+# 18) Test debug image output
 ###############################################################################
 debug_img_1 = np.dstack((masked_img, masked_img, masked_img)) * 255
 debug_img_2 = draw_on_img

@@ -22,7 +22,7 @@ In the first step, I applied the same distortion correction method mentioned abo
 
 #### 2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
 
-I used a combination of color and gradient thresholds to generate a binary image (thresholding steps at lines #115 through #142 in `helper_funcs.py`).  Here's an example of my output for this step. 
+I used a combination of color channel S, black color (exclusion), yellow color, white color and gradient thresholds to generate a binary image (thresholding steps at lines #127 through #150 in `helper_funcs.py`).  Here's an example of my output for this step. 
 
 ![image processing before and after](examples/Original_Image_vs_Combination_of_Selected_Thresholds.jpg)
 
@@ -40,7 +40,7 @@ vertices = np.array(
 
 #### 3. Describe how (and identify where in your code) you performed a perspective transform and provide an example of a transformed image.
 
-The code for my perspective transform can be found at line #99 of `helper_funcs_test.py` for unit test and line #64 of `adv_lane_detection.py` for the final pipeline, where I called the `cv2.warpPerspective` function directly. It takes an image input (`img`), as well as source (`src`) and destination (`dst`) points.  I chose the following hardcoded source and destination points:
+The code for my perspective transform can be found at line #101 of `helper_funcs_test.py` for unit test and line #68 and #145 of `adv_lane_detection.py` for the final pipeline, where I called the `cv2.warpPerspective` function directly. It takes an image input (`img`), as well as source (`src`) and destination (`dst`) points.  I chose the following hardcoded source and destination points:
 
 ```python
 src = np.float32(
@@ -71,9 +71,23 @@ I verified that my perspective transform was working as expected by drawing the 
 
 #### 4. Describe how (and identify where in your code) you identified lane-line pixels and fit their positions with a polynomial?
 
-Then I used sliding window method (line #185 through #293 in `helper_funcs.py`)to identify the regions where lane lines are located, and then fit my lane lines with a 2nd order polynomial, which looks like this:
+Then I used sliding window method (line #205 through #322 in `helper_funcs.py`)to identify the regions where lane lines are located, and then fit my lane lines with a 2nd order polynomial, which looks like this:
 
 ![alt text](examples/Lane_Lines_Detected_by_Sliding_Windows.jpg)
+
+I used below equation for plotting
+
+```python
+left_fit = np.polyfit(lefty, leftx, 2)
+right_fit = np.polyfit(righty, rightx, 2)
+```
+And I used below equations to fit the curve into world coordinate system for curvature calculation
+
+```python
+left_fit_cr = np.polyfit(lefty * ym_per_pix, leftx * xm_per_pix, 2)
+right_fit_cr = np.polyfit(righty * ym_per_pix, rightx * xm_per_pix, 2)
+```
+
 
 #### 5. Describe how (and identify where in your code) you calculated the radius of curvature of the lane and the position of the vehicle with respect to center.
 
@@ -126,7 +140,9 @@ The pipeline function `lane_detection_pipeline()` can be found at `adv_lane_dete
 
 #### 1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-In general the pipeline defined in the function `lane_detection_pipeline()` located in `adv_lane_detection.py` worked well for most scenarios in `project_video.mp4`. The lane detection performance however dropped when an extensive amount of shadows were captured in the image, where the image processing function (thresholds, maskings, etc.) can hardly separate the yellow/white lines from the shadows.
+In the first submission, in general the pipeline defined in the function `lane_detection_pipeline()` located in `adv_lane_detection.py` worked well for most scenarios in `project_video.mp4`. The lane detection performance however dropped when an extensive amount of shadows were captured in the image, where the image processing function (thresholds, maskings, etc.) can hardly separate the yellow/white lines from the shadows.
 
 In the challenge video, since the yellow lines had a slightly different color than the `project_video.mp4`, the hard coded thresholds didn't work well. I tried other combinations of threhold values and masks, which improved the performance on the challenge video however no longer worked well on `project_video.mp4`. In the future, I will test more parameters to findout one set that fits as many videos as possible.
+
+Per reviewer's comments, I later added yellow, white and black color filtering. The new algorithm turned out better than the previously especially when shadow presents in the image. I also corrected the calculation of road curvature.
 

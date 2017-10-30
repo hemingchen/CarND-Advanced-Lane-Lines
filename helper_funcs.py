@@ -112,6 +112,18 @@ def color_channel_threshold(img, color_channel='s', thresh=(170, 255)):
     return channel_binary
 
 
+def select_color_threshold(img, range, color_conversion=None):
+    working_copy = np.copy(img)
+
+    # Convert color space if needed
+    if color_conversion is not None:
+        working_copy = cv2.cvtColor(working_copy, color_conversion)
+    # Select color per threshold
+    select_color_binary = cv2.inRange(working_copy, np.array(range[0]), np.array(range[1]))
+
+    return select_color_binary
+
+
 def apply_multiple_thresholds(
         img,
         ksize=3,
@@ -121,7 +133,10 @@ def apply_multiple_thresholds(
         dir_thresh=(0, np.pi / 2),
         h_thresh=None,
         l_thresh=None,
-        s_thresh=(170, 255)):
+        s_thresh=(170, 255),
+        yellow_range=([20, 60, 60], [38, 174, 250]),
+        white_range=([202, 202, 202], [255, 255, 255]),
+        black_range=([0, 0, 0], [30, 30, 30])):
     # 1) Add Sobel thresholds in x, y direction
     gradx = abs_sobel_thresh(img, orient='x', ksize=ksize, thresh=xgrad_thresh)
     grady = abs_sobel_thresh(img, orient='y', ksize=ksize, thresh=ygrad_thresh)
@@ -135,9 +150,32 @@ def apply_multiple_thresholds(
     # 4) Add s channel thresholds
     color_binary = color_channel_threshold(img, color_channel='s', thresh=s_thresh)
 
-    # 5) Combine all binary thresholds
+    # 5) Add yellow color selection thresholds
+    select_yellow_binary = select_color_threshold(img, range=yellow_range, color_conversion=cv2.COLOR_RGB2HSV)
+
+    # 6) Add white color selection thresholds
+    select_white_binary = select_color_threshold(img, range=white_range, color_conversion=None)
+
+    # 7) Add black color selection thresholds
+    select_black_binary = select_color_threshold(img, range=black_range, color_conversion=None)
+
+    # 8) Combine all binary thresholds
     combined_binary = np.zeros((img.shape[0], img.shape[1]), dtype=np.uint8)
-    combined_binary[(color_binary == 1) | (gradx == 1)] = 1
+
+    # combined_binary[
+    #     (color_binary == 1) |
+    #     (gradx == 1) |
+    #     (select_yellow_binary == 1) |
+    #     (select_white_binary == 1)] = 1
+    # combined_binary[
+    #     (gradx == 1) |
+    #     ((select_yellow_binary == 1) & (color_binary == 1)) |
+    #     (select_white_binary == 1)] = 1
+    combined_binary[
+        (gradx == 1) |
+        (select_yellow_binary == 1) |
+        ((color_binary == 1) & (select_black_binary == 0)) |
+        (select_white_binary == 1)] = 1
 
     return combined_binary
 
@@ -183,8 +221,8 @@ def get_starting_points_of_lane_lines(img):
 
 
 def get_lane_lines_with_sliding_window(
-        img, leftx_base, rightx_base, prior_left_fit, prior_right_fit, xm_per_pix, ym_per_pix,
-        nwindows=9, margin=100, minpix=50, minfot=0.5, lane_width_pixel=800,
+        img, leftx_base, rightx_base, prior_left_fit, prior_right_fit, prior_left_fit_cr, prior_right_fit_cr,
+        xm_per_pix, ym_per_pix, nwindows=9, margin=100, minpix=50, minfot=0.5, lane_width_pixel=800,
         step_size=30, lane_line_color=[255, 255, 0], lane_line_thickness=10):
     # Assuming input is a binary warped image
     # Create an output image to draw on and  visualize the result
@@ -249,12 +287,21 @@ def get_lane_lines_with_sliding_window(
     left_fit = np.polyfit(lefty, leftx, 2)
     right_fit = np.polyfit(righty, rightx, 2)
 
+    # Fit new polynomials to x,y in world space
+    left_fit_cr = np.polyfit(lefty * ym_per_pix, leftx * xm_per_pix, 2)
+    right_fit_cr = np.polyfit(righty * ym_per_pix, rightx * xm_per_pix, 2)
+
     # Calibrate lane curve
-    left_fit, right_fit = get_calibrated_lane_curves(
+    left_fit, right_fit, left_fit_cr, right_fit_cr = get_calibrated_lane_curves(
         prior_left_fit=prior_left_fit,
         prior_right_fit=prior_right_fit,
+        prior_left_fit_cr=prior_left_fit_cr,
+        prior_right_fit_cr=prior_right_fit_cr,
         left_fit=left_fit,
         right_fit=right_fit,
+        left_fit_cr=left_fit_cr,
+        right_fit_cr=right_fit_cr,
+        xm_per_pix=xm_per_pix,
         minfot=minfot,
         lane_width_pixel=lane_width_pixel)
 
@@ -276,8 +323,8 @@ def get_lane_lines_with_sliding_window(
     # Get lane curvature
     left_curverad, right_curverad = get_radius_of_curvature(
         ploty=ploty,
-        left_fit=left_fit,
-        right_fit=right_fit,
+        left_fit=left_fit_cr,
+        right_fit=right_fit_cr,
         xm_per_pix=xm_per_pix,
         ym_per_pix=ym_per_pix)
 
@@ -290,11 +337,12 @@ def get_lane_lines_with_sliding_window(
         right_curverad=right_curverad,
         xm_per_pix=xm_per_pix)
 
-    return left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img
+    return left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img
 
 
 def get_lane_lines_based_on_prior_frame_lines(
-        img, prior_left_fit, prior_right_fit, xm_per_pix, ym_per_pix, margin=100, minfot=0.5, lane_width_pixel=800,
+        img, prior_left_fit, prior_right_fit, prior_left_fit_cr, prior_right_fit_cr,
+        xm_per_pix, ym_per_pix, margin=100, minfot=0.5, lane_width_pixel=800,
         step_size=30, lane_line_color=[255, 255, 0], lane_line_thickness=10):
     # Assume input is a binary warped image
     # Create an output image to draw on and  visualize the result
@@ -334,16 +382,26 @@ def get_lane_lines_based_on_prior_frame_lines(
         left_fit = np.polyfit(lefty, leftx, 2)
         right_fit = np.polyfit(righty, rightx, 2)
 
+        # Fit new polynomials to x,y in world space
+        left_fit_cr = np.polyfit(lefty * ym_per_pix, leftx * xm_per_pix, 2)
+        right_fit_cr = np.polyfit(righty * ym_per_pix, rightx * xm_per_pix, 2)
+
         # Calibrate lane curve
-        left_fit, right_fit = get_calibrated_lane_curves(
+        left_fit, right_fit, left_fit_cr, right_fit_cr = get_calibrated_lane_curves(
             prior_left_fit=prior_left_fit,
             prior_right_fit=prior_right_fit,
+            prior_left_fit_cr=prior_left_fit_cr,
+            prior_right_fit_cr=prior_right_fit_cr,
             left_fit=left_fit,
             right_fit=right_fit,
+            left_fit_cr=left_fit_cr,
+            right_fit_cr=right_fit_cr,
+            xm_per_pix=xm_per_pix,
             minfot=minfot,
             lane_width_pixel=lane_width_pixel)
     else:
         left_fit, right_fit = prior_left_fit, prior_right_fit
+        left_fit_cr, right_fit_cr = prior_left_fit_cr, prior_right_fit_cr
 
         # timestamp = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
         # dest_folder = "./problem_images"
@@ -387,8 +445,8 @@ def get_lane_lines_based_on_prior_frame_lines(
     # Get lane curvature
     left_curverad, right_curverad = get_radius_of_curvature(
         ploty=ploty,
-        left_fit=left_fit,
-        right_fit=right_fit,
+        left_fit=left_fit_cr,
+        right_fit=right_fit_cr,
         xm_per_pix=xm_per_pix,
         ym_per_pix=ym_per_pix)
 
@@ -401,7 +459,7 @@ def get_lane_lines_based_on_prior_frame_lines(
         right_curverad=right_curverad,
         xm_per_pix=xm_per_pix)
 
-    return left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img
+    return left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img
 
 
 def get_radius_of_curvature(ploty, left_fit, right_fit, xm_per_pix, ym_per_pix):
@@ -415,7 +473,10 @@ def get_radius_of_curvature(ploty, left_fit, right_fit, xm_per_pix, ym_per_pix):
     return left_curverad, right_curverad
 
 
-def get_calibrated_lane_curves(prior_left_fit, prior_right_fit, left_fit, right_fit, minfot=0.5, lane_width_pixel=800):
+def get_calibrated_lane_curves(
+        prior_left_fit, prior_right_fit, prior_left_fit_cr, prior_right_fit_cr,
+        left_fit, right_fit, left_fit_cr, right_fit_cr,
+        xm_per_pix, minfot=0.5, lane_width_pixel=800):
     left_fot = abs(left_fit[1])
     right_fot = abs(right_fit[1])
     # print("left_fot ", left_fot)
@@ -423,24 +484,28 @@ def get_calibrated_lane_curves(prior_left_fit, prior_right_fit, left_fit, right_
 
     if left_fot > minfot and right_fot > minfot:
         # Bad curverad on both lines
-        return prior_left_fit, prior_right_fit
+        return prior_left_fit, prior_right_fit, prior_left_fit_cr, prior_right_fit_cr
 
     elif left_fot > minfot:
         # Left lane curve is bad
         # print("left lane curve is bad")
         left_fit = np.copy(right_fit)
         left_fit[2] = left_fit[2] - lane_width_pixel
-        return left_fit, right_fit
+        left_fit_cr = np.copy(right_fit_cr)
+        left_fit_cr[2] = left_fit_cr[2] - lane_width_pixel * xm_per_pix
+        return left_fit, right_fit, left_fit_cr, right_fit_cr
 
     elif right_fot > minfot:
         # Right lane curve is bad
         # print("right lane curve is bad")
         right_fit = np.copy(left_fit)
         right_fit[2] = right_fit[2] + lane_width_pixel
-        return left_fit, right_fit
+        right_fit_cr = np.copy(left_fit_cr)
+        right_fit_cr[2] = right_fit_cr[2] - lane_width_pixel * xm_per_pix
+        return left_fit, right_fit, left_fit_cr, right_fit_cr
 
     else:
-        return left_fit, right_fit
+        return left_fit, right_fit, left_fit_cr, right_fit_cr
 
 
 def get_vehicle_position_wrt_lane_center(imshape, left_fit, right_fit, left_curverad, right_curverad, xm_per_pix):

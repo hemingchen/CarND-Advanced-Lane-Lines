@@ -21,6 +21,9 @@ def lane_detection_pipeline(
         h_thresh,
         l_thresh,
         s_thresh,
+        yellow_range,
+        white_range,
+        black_range,
         vertices,
         M,
         Minv,
@@ -37,7 +40,7 @@ def lane_detection_pipeline(
         highlight_lane_area_y_start,
         highlight_lane_area_y_end,
         debug):
-    global prior_left_fit, prior_right_fit
+    global prior_left_fit, prior_right_fit, prior_left_fit_cr, prior_right_fit_cr
 
     # Check raw image dimensions
     img_shape = raw_img.shape
@@ -55,7 +58,10 @@ def lane_detection_pipeline(
         dir_thresh=dir_thresh,
         h_thresh=h_thresh,
         l_thresh=l_thresh,
-        s_thresh=s_thresh)
+        s_thresh=s_thresh,
+        yellow_range=yellow_range,
+        white_range=white_range,
+        black_range=black_range)
 
     # Apply mask
     masked_img = region_of_interest(combined_binary, vertices=vertices)
@@ -63,8 +69,8 @@ def lane_detection_pipeline(
     # Change perspective
     warped_img = cv2.warpPerspective(masked_img, M, (img_shape[1], img_shape[0]), flags=cv2.INTER_LINEAR)
 
-    left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
-        None, None, None, None, None, None
+    left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
+        None, None, None, None, None, None, None, None
 
     # If not prior window information, use sliding window to detect lane lines
     if prior_left_fit is None or prior_right_fit is None:
@@ -73,13 +79,15 @@ def lane_detection_pipeline(
         # Get starting points on the bottom of the image
         leftx_base, rightx_base = get_starting_points_of_lane_lines(img=warped_img)
 
-        left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
+        left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
             get_lane_lines_with_sliding_window(
                 img=warped_img,
                 leftx_base=leftx_base,
                 rightx_base=rightx_base,
                 prior_left_fit=prior_left_fit,
                 prior_right_fit=prior_left_fit,
+                prior_left_fit_cr=prior_left_fit_cr,
+                prior_right_fit_cr=prior_right_fit_cr,
                 xm_per_pix=xm_per_pix,
                 ym_per_pix=ym_per_pix,
                 nwindows=nwindows,
@@ -92,11 +100,13 @@ def lane_detection_pipeline(
                 lane_line_thickness=lane_thickness)
     else:
         # print("use prior frame info")
-        left_fit, right_fit, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
+        left_fit, right_fit, left_fit_cr, right_fit_cr, left_curverad, right_curverad, veh_pos_wrt_ln_ctr, draw_on_img = \
             get_lane_lines_based_on_prior_frame_lines(
                 img=warped_img,
                 prior_left_fit=prior_left_fit,
                 prior_right_fit=prior_right_fit,
+                prior_left_fit_cr=prior_left_fit_cr,
+                prior_right_fit_cr=prior_right_fit_cr,
                 xm_per_pix=xm_per_pix,
                 ym_per_pix=ym_per_pix,
                 margin=margin,
@@ -109,6 +119,8 @@ def lane_detection_pipeline(
     # Update cache
     prior_left_fit = left_fit
     prior_right_fit = right_fit
+    prior_left_fit_cr = left_fit_cr
+    prior_right_fit_cr = right_fit_cr
 
     # Create an empty canvas
     blank_canvas = np.zeros_like(raw_img)
@@ -171,6 +183,9 @@ def test_pipeline_on_one_image(raw_img):
         h_thresh=h_thresh,
         l_thresh=l_thresh,
         s_thresh=s_thresh,
+        yellow_range=yellow_range,
+        white_range=yellow_range,
+        black_range=black_range,
         vertices=vertices,
         M=M,
         Minv=Minv,
@@ -207,6 +222,9 @@ def test_pipeline_on_video(input_path, output_path, subclip_range=None):
         h_thresh=h_thresh,
         l_thresh=l_thresh,
         s_thresh=s_thresh,
+        yellow_range=yellow_range,
+        white_range=yellow_range,
+        black_range=black_range,
         vertices=vertices,
         M=M,
         Minv=Minv,
@@ -235,14 +253,16 @@ def test_pipeline_on_video(input_path, output_path, subclip_range=None):
 if __name__ == "__main__":
     # 1) Test pipeline once
     prior_left_fit, prior_right_fit = None, None
+    prior_left_fit_cr, prior_right_fit_cr = None, None
     raw_img = mpimg.imread("test_images/challenge_video_0_1/1.jpg")
-    test_pipeline_on_one_image(raw_img)
+    # test_pipeline_on_one_image(raw_img)
 
     # 2) Test pipeline on project video
     prior_left_fit, prior_right_fit = None, None
+    prior_left_fit_cr, prior_right_fit_cr = None, None
     input_path = "test_videos/project_video.mp4"
     output_path = "output_videos/project_video_output.mp4"
-    subclip_range = None # (41, 42)
+    subclip_range = None # (35, 45)  # (0, 5) # (41, 42)
     test_pipeline_on_video(
         input_path=input_path,
         output_path=output_path,
@@ -250,6 +270,7 @@ if __name__ == "__main__":
 
     # 3) Test pipeline on challenge video
     # prior_left_fit, prior_right_fit = None, None
+    # prior_left_fit_cr, prior_right_fit_cr = None, None
     # input_path = "test_videos/challenge_video.mp4"
     # output_path = "output_videos/challenge_video_output.mp4"
     # subclip_range = None

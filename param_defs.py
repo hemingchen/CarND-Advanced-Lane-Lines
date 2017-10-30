@@ -33,11 +33,13 @@ ksize = 3
 xgrad_thresh = (20, 100)
 ygrad_thresh = (70, 200)
 mag_thresh = (70, 255)
-dir_thresh = (0.1, 1.5) #(0, np.pi / 2)
+dir_thresh = (0.1, 1.5)  # (0, np.pi / 2)
 h_thresh = None
 l_thresh = None
-s_thresh = (100, 255) # (170, 255)
-
+s_thresh = (170, 220)  # (170, 255)
+yellow_range = ([20, 60, 60], [38, 174, 250])
+white_range = ([202, 202, 202], [255, 255, 255])
+black_range= ([0, 0, 0], [30, 30, 30])
 # Define perspective transformation matrix
 src = np.float32(
     [[100, 720],
@@ -53,7 +55,7 @@ M = cv2.getPerspectiveTransform(src, dst)
 Minv = cv2.getPerspectiveTransform(dst, src)
 
 # Minimum valid curverad value
-minfot = 1.0# 0.5
+minfot = 1.0  # 0.5
 lane_width_pixel = 800
 
 # Debug
